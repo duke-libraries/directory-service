@@ -1,2 +1,4 @@
-ldap-search
-===========
+directory-service
+=================
+
+A basic LDAP search service.
