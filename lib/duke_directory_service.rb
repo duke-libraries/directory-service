@@ -2,17 +2,44 @@ require 'directory_service'
 
 class DukeDirectoryService < DirectoryService
 
-  def netid_or_duid_search(query)
-    filter = duid_filter(query) | netid_filter(query)
-    search_results_s filter
+  DUID_ATTRIBUTE = "dudukeid"
+
+  NETID_ATTRIBUTE = "uid"
+
+  def result_class
+    DukeDirectoryService::Result
   end
 
-  def netid_filter(query)
-    uid_filter(query)
+  def netid_search(query)
+    search Filters.netid(query)
   end
 
-  def duid_filter(query)
-    Net::LDAP::Filter.eq("dudukeid", query)
+  class Result < DirectoryService::Result
+    def netid
+      send NETID_ATTRIBUTE
+    end
+
+    def duid
+      send DUID_ATTRIBUTE
+    end
+
+    def duke_unique_id
+      duid
+    end
+  end
+
+  class Filters < DirectoryService::Filters
+    def self.duid(query)
+      filter :eq, DUID_ATTRIBUTE, query
+    end
+
+    def self.netid(query)
+      filter :eq, NETID_ATTRIBUTE, query
+    end
+
+    def self.netid_or_duid(query)
+      netid(query) | duid(query)
+    end
   end
 
 end
