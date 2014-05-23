@@ -19,9 +19,7 @@ class DirectoryService
 
   # Returns search results normalized as hash with string values
   def search_results_s(filter)
-    search_results(filter).collect do |entry|
-      entry.attribute_names.each_with_object({}) { |attr, memo| memo[attr] = entry[attr].first }
-    end
+    search_results(filter).map(&:first_values)
   end
 
   def name_filter(query)
@@ -36,4 +34,13 @@ class DirectoryService
     Net::LDAP.new(host: host, base: base, scope: scope)
   end
 
+end
+
+Net::LDAP::Entry.class_eval do
+  include Enumerable
+
+  # Returns a hash of attributes and the first value of each attribute
+  def first_values
+    attribute_names.each_with_object({}) { |attr, memo| memo[attr] = self[attr].first }
+  end
 end

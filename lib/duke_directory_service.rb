@@ -1,3 +1,5 @@
+require 'directory_service'
+
 class DukeDirectoryService < DirectoryService
 
   def netid_or_duid_search(query)
