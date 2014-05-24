@@ -2,16 +2,25 @@ require 'directory_service'
 
 class DukeDirectoryService < DirectoryService
 
+  class Error < DirectoryService::Error; end
+
   DUID_ATTRIBUTE = "dudukeid"
-
   NETID_ATTRIBUTE = "uid"
+  HOST = "ldap.duke.edu"
+  BASE = "ou=people,dc=duke,dc=edu"
+  SSL_PORT = 636
 
-  def result_class
-    DukeDirectoryService::Result
+  def initialize(config={})
+    super
+    @host ||= HOST
+    @base ||= BASE
+    @port ||= SSL_PORT unless @username.nil?
   end
 
-  def netid_search(query)
-    search Filters.netid(query)
+  def netid_search(netid, args={})
+    search_one_result Net::LDAP::Filter.eq(NETID_ATTRIBUTE, netid), args
+  rescue DirectoryService::Error => e
+    raise Error, e.message
   end
 
   class Result < DirectoryService::Result
@@ -28,18 +37,10 @@ class DukeDirectoryService < DirectoryService
     end
   end
 
-  class Filters < DirectoryService::Filters
-    def self.duid(query)
-      filter :eq, DUID_ATTRIBUTE, query
-    end
+  protected
 
-    def self.netid(query)
-      filter :eq, NETID_ATTRIBUTE, query
-    end
-
-    def self.netid_or_duid(query)
-      netid(query) | duid(query)
-    end
+  def result_class
+    DukeDirectoryService::Result
   end
 
 end

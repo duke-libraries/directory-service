@@ -2,32 +2,52 @@ require 'net-ldap'
 
 class DirectoryService
 
-  attr_accessor :host, :base, :scope, :attributes
+  attr_reader :host, :port, :auth
+  attr_accessor :base, :scope, :attributes
   
   DEFAULT_SCOPE = Net::LDAP::SearchScope_SingleLevel
 
+  class Error < StandardError; end
+  class MultipleResultsError < Error; end
+  class NoResultsError < Error; end
+
   def initialize(config={})
-    @host = config.fetch :host, ENV['DIRECTORY_HOST']
-    @base = config.fetch :base, ENV['DIRECTORY_BASE']
-    @scope = config.fetch :scope, DEFAULT_SCOPE
+    @host = config.fetch(:host, ENV['DIRECTORY_HOST'])
+    @base = config.fetch(:base, ENV['DIRECTORY_BASE'])
+    @scope = config.fetch(:scope, ENV['DIRECTORY_SCOPE']) || DEFAULT_SCOPE
+    @port = config.fetch(:port, ENV['DIRECTORY_PORT']) # default LDAP port if nil
+    @username = config.fetch(:username, ENV['DIRECTORY_USER'])
+    @password = config.fetch(:password, ENV['DIRECTORY_PASS'])
+    @auth = {method: :simple, username: @username, password: @password} if @username
     @attributes = config[:attributes] # nil or empty array retrieves all attributes
     yield self if block_given?
   end
 
-  def result_class
-    Result
+  def inspect
+    "#<#{self.class.name}: @host=#{host} @port=#{port} @base=#{base} @scope=#{scope}>"
   end
 
-  def search(filter)
-    results = []
-    client.search(filter: filter, attribute: attributes) do |result|
-      results << result_class.new(result)
-    end
-    results
+  def search(filter, args={})
+    args.merge!(filter: filter)
+    args[:attributes] ||= attributes
+    _search(args)
+  rescue Net::LDAP::LdapError => e
+    raise Error, "LDAP error: #{e.message}"
   end
 
-  def client
-    Net::LDAP.new(host: host, base: base, scope: scope)
+  def name_search(name, args={})
+    search Net::LDAP::Filter.contains("cn", name), args
+  end
+
+  def uid_search(uid, args={})
+    search_one_result Net::LDAP::Filter.eq("uid", uid), args
+  end
+
+  def search_one_result(filter, args={})
+    results = search(filter, args)
+    raise NoResultsError, "No results for query: #{filter.inspect}" if results.empty?
+    raise MultipleResultsError, "Unexpected multiple results for query: #{filter.inspect}" if results.size > 1
+    results.first
   end
 
   # A directory search result
@@ -39,42 +59,52 @@ class DirectoryService
       @ldap_entry = ldap_entry
     end
 
-    def first_value(attribute)
-      ldap_entry[attribute].first
+    def [](attr_name)
+      ldap_entry[attr_name]
     end
 
-    def attribute_names
-      ldap_entry.attrubute_names
+    def first_value(attr_name)
+      attr = get_attribute(attr_name)
+      attr && attr.first
     end
 
     def first_values
-      attribute_names.each_with_object({}) { |attr, memo| memo[attr] = first_value(attr) }
+      ldap_entry.attribute_names.each_with_object({}) { |attr, memo| memo[attr] = first_value(attr) }
     end
 
-    def method_missing(sym, *args)
-      retval = ldap_entry.method_missing(sym, *args)
-      return retval.first if retval.respond_to? :first
+    def has_attribute?(attr_name)
+      ldap_entry.attribute_names.include? attr_name
+    end
+
+    def method_missing(method, *args)
+      return self[method] if has_attribute?(method)
       super
     end
   end
 
-  # Ddirectory search filters
-  class Filters
-    def self.cn(query)
-      filter :contains, "cn", query
-    end
+  protected
 
-    def self.uid(query)
-      filter :eq, "uid", query
-    end
+  def result_class
+    Result
+  end
 
-    def self.eppn(query)
-      filter :eq, "edupersonprincipalname", query
-    end
+  private
 
-    def self.filter(op, attribute, query)
-      Net::LDAP::Filter.send(op, attribute, query)
+  def ldap_config
+    {host: host, base: base, scope: scope, auth: auth}
+  end
+
+  def client
+    Net::LDAP.new ldap_config
+  end
+
+  def _search(args={})
+    logger.debug "#{self.class.to_s} search with argments: #{args}"
+    results = []
+    client.search(args) do |result|
+      results << result_class.new(result)
     end
+    results
   end
 
 end
