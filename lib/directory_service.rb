@@ -7,6 +7,8 @@ class DirectoryService
   
   DEFAULT_SCOPE = Net::LDAP::SearchScope_SingleLevel
 
+  EPPN_ATTRIBUTE = "edupersonprincipalname"
+
   class Error < StandardError; end
   class MultipleResultsError < Error; end
   class NoResultsError < Error; end
@@ -39,8 +41,12 @@ class DirectoryService
     search Net::LDAP::Filter.contains("cn", name), args
   end
 
-  def uid_search(uid, args={})
+  def find_by_uid(uid, args={})
     search_one_result Net::LDAP::Filter.eq("uid", uid), args
+  end
+
+  def find_by_eppn(eppn, args={})
+    search_one_result Net::LDAP::Filter.eq(EPPN_ATTRIBUTE, eppn), args
   end
 
   def search_one_result(filter, args={})
@@ -64,8 +70,8 @@ class DirectoryService
     end
 
     def first_value(attr_name)
-      attr = get_attribute(attr_name)
-      attr && attr.first
+      values = self[attr_name]
+      values && values.first
     end
 
     def first_values
@@ -73,11 +79,11 @@ class DirectoryService
     end
 
     def has_attribute?(attr_name)
-      ldap_entry.attribute_names.include? attr_name
+      ldap_entry.attribute_names.include? attr_name.to_sym
     end
 
     def method_missing(method, *args)
-      return self[method] if has_attribute?(method)
+      return self[method.to_s] if has_attribute?(method)
       super
     end
   end
