@@ -10,23 +10,15 @@ describe DirectoryService do
     end
   end
   describe "#search" do
-    it "should raise a custom expection on an LDAP error" do
+    it "should raise a custom exception on an LDAP error" do
       allow(subject).to receive(:_search).with(hash_including(filter: filter, attributes: nil)).and_raise(Net::LDAP::LdapError)
       expect { subject.search(filter) }.to raise_error(DirectoryService::Error)
     end
   end
-  describe "#search_one_result" do
-    before do
-      allow(subject).to receive(:search).with(filter, {}) { results }
-    end
-    it "should raise an exception when multiple results are returned" do
-      allow(results).to receive(:empty?) { false }
-      allow(results).to receive(:size) { 2 }
-      expect { subject.search_one_result(filter) }.to raise_error(DirectoryService::MultipleResultsError)
-    end
-    it "should raise an exception when no results are returned" do
-      allow(results).to receive(:empty?) { true }
-      expect { subject.search_one_result(filter) }.to raise_error(DirectoryService::NoResultsError)
+  describe "#find_by_*" do
+    it "should call `search' and return the first result" do
+      allow(subject).to receive(:search).with(Net::LDAP::Filter.eq("uid", "bob"), {}) { ["Bob Smith"] }
+      expect(subject.find_by_uid("bob")).to eq("Bob Smith")
     end
   end
 end

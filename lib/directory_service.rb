@@ -6,20 +6,17 @@ class DirectoryService
   attr_accessor :base, :scope, :attributes
   
   DEFAULT_SCOPE = Net::LDAP::SearchScope_SingleLevel
-
-  EPPN_ATTRIBUTE = "edupersonprincipalname"
+  SSL_PORT = 636
 
   class Error < StandardError; end
-  class MultipleResultsError < Error; end
-  class NoResultsError < Error; end
 
   def initialize(config={})
     @host = config.fetch(:host, ENV['DIRECTORY_HOST'])
     @base = config.fetch(:base, ENV['DIRECTORY_BASE'])
     @scope = config.fetch(:scope, ENV['DIRECTORY_SCOPE']) || DEFAULT_SCOPE
-    @port = config.fetch(:port, ENV['DIRECTORY_PORT']) # default LDAP port if nil
     @username = config.fetch(:username, ENV['DIRECTORY_USER'])
     @password = config.fetch(:password, ENV['DIRECTORY_PASS'])
+    @port = config.fetch(:port, ENV['DIRECTORY_PORT'])
     @auth = {method: :simple, username: @username, password: @password} if @username
     @attributes = config[:attributes] # nil or empty array retrieves all attributes
     yield self if block_given?
@@ -41,19 +38,24 @@ class DirectoryService
     search Net::LDAP::Filter.contains("cn", name), args
   end
 
-  def find_by_uid(uid, args={})
-    search_one_result Net::LDAP::Filter.eq("uid", uid), args
-  end
-
-  def find_by_eppn(eppn, args={})
-    search_one_result Net::LDAP::Filter.eq(EPPN_ATTRIBUTE, eppn), args
-  end
-
-  def search_one_result(filter, args={})
-    results = search(filter, args)
-    raise NoResultsError, "No results for query: #{filter.inspect}" if results.empty?
-    raise MultipleResultsError, "Unexpected multiple results for query: #{filter.inspect}" if results.size > 1
-    results.first
+  def method_missing(method, *args)
+    if method.to_s.start_with?('find_by_') && !args.empty?
+      #
+      # Map find_by_* methods to search with eq filter, returning first result
+      # in similar fashion as ActiveRecord find_by methods.
+      #
+      # Example: 
+      #
+      #     find_by_uid("bob")
+      #      => search_one_result Net::LDAP::Filter.eq("uid", "bob"), {}
+      #
+      value = args.shift
+      attr_name = method.to_s.sub(/^find_by_/, "")
+      filter = Net::LDAP::Filter.eq(attr_name, value)
+      opts = args.shift || {}
+      return search(filter, opts).first
+    end
+    super
   end
 
   # A directory search result
@@ -105,7 +107,6 @@ class DirectoryService
   end
 
   def _search(args={})
-    logger.debug "#{self.class.to_s} search with argments: #{args}"
     results = []
     client.search(args) do |result|
       results << result_class.new(result)
