@@ -52,6 +52,25 @@ Search with Net::LDAP filters
 Search with string filters (as supported by Net::LDAP)
 
 ```ruby
-> ds.search("(cn=*coble*)")
+> ds.search("(cn=*foobar*)")
  => [#<DirectoryService::Result:0x007f910190afa8 ...>, #<DirectoryService::Result:0x007f91018f1440 ...>, #<DirectoryService::Result:0x007f91018e8fc0 ...>, ...
+```
+
+Search Results
+
+```ruby
+> result.has_attribute? :foo
+ => false
+> result.has_attribute? :uid
+ => true
+> result.has_attribute? "uid"
+ => true
+> result[:uid]
+ => ["foobar"]
+> result.uid
+ => ["foobar"]
+> result.first_value :uid
+ => "foobar"
+> result.first_values
+ => {:uid=>"foobar", :givenname=>"foo", :sn=>"bar", ... }
 ```
