@@ -26,6 +26,12 @@ end
 describe DirectoryService::Result do
   let(:ldap_entry) { double("ldap_entry") }
   subject { described_class.new(ldap_entry) }
+  describe "attribute_names" do
+    it "should delegate to the ldap entry" do
+      allow(subject.ldap_entry).to receive(:attribute_names) { ["foo", "bar"] }
+      expect(subject.attribute_names).to eq(["foo", "bar"])
+    end
+  end
   describe "key access to attributes" do
     it "should delegate to the ldap entry" do
       expect(subject.ldap_entry).to receive(:[]).with("foo")
@@ -34,7 +40,7 @@ describe DirectoryService::Result do
   end
   describe "method access to attributes" do
     it "should return the attribute value if attribute present" do
-      allow(ldap_entry).to receive(:attribute_names) { ["foo", "bar"] }
+      allow(subject).to receive(:attribute_names) { ["foo", "bar"] }
       allow(subject).to receive(:has_attribute?).with(:foo) { true }
       allow(subject).to receive(:[]).with("foo") { ["spam", "eggs"] }
       expect(subject.foo).to eq(["spam", "eggs"])
@@ -52,6 +58,22 @@ describe DirectoryService::Result do
     it "should return nil if attribute not present" do
       allow(subject).to receive(:[]).with("foo") { nil }
       expect(subject.first_value("foo")).to be_nil
+    end
+  end
+  describe "#to_hash" do
+    it "should return a hash of LDAP attributes and values" do
+      allow(subject).to receive(:attribute_names) { ["foo", "bar"] }
+      allow(subject).to receive(:[]).with("foo") { ["spam"] }
+      allow(subject).to receive(:[]).with("bar") { ["eggs"] }
+      expect(subject.to_hash.keys).to match_array(["foo", "bar"])
+      expect(subject.to_hash.values).to match_array([["spam"], ["eggs"]])
+    end
+  end
+  describe "#to_json" do
+    it "should serialize the hash representation" do
+      allow(subject).to receive(:to_hash) { {foo: "spam", bar: "eggs"} }
+      expect(JSON).to receive(:generate).with({foo: "spam", bar: "eggs"})
+      subject.to_json
     end
   end
 end

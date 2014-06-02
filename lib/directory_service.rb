@@ -1,4 +1,5 @@
 require 'net-ldap'
+require 'json'
 
 class DirectoryService
 
@@ -47,7 +48,7 @@ class DirectoryService
       # Example: 
       #
       #     find_by_uid("bob")
-      #      => search_one_result Net::LDAP::Filter.eq("uid", "bob"), {}
+      #      => search(Net::LDAP::Filter.eq("uid", "bob"), {}).first
       #
       value = args.shift
       attr_name = method.to_s.sub(/^find_by_/, "")
@@ -71,17 +72,26 @@ class DirectoryService
       ldap_entry[attr_name]
     end
 
+    def attribute_names
+      ldap_entry.attribute_names
+    end
+
     def first_value(attr_name)
       values = self[attr_name]
       values && values.first
     end
 
-    def first_values
-      ldap_entry.attribute_names.each_with_object({}) { |attr, memo| memo[attr] = first_value(attr) }
+    def to_hash
+      attribute_names.each_with_object({}) { |attr, memo| memo[attr] = self[attr] }
+    end
+    alias_method :attributes, :to_hash
+
+    def to_json
+      JSON.generate(to_hash)
     end
 
     def has_attribute?(attr_name)
-      ldap_entry.attribute_names.include? attr_name.to_sym
+      attribute_names.include? attr_name.to_sym
     end
 
     def method_missing(method, *args)
